@@ -1,1 +1,1 @@
-curl -sSfL https://raw.githubusercontent.com/tact-svg/Apex-Package-Manager/main/install.sh | sh
+curl -sSfL "https://raw.githubusercontent.com/tact-svg/Apex-Package-Manager/main/install.sh?t=$(date +%s)" | bash
