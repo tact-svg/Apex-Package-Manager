@@ -22,6 +22,12 @@ enum Commands {
     Search { query: String },
     /// Install any package locally or via universal Nix registry
     Install { name: String },
+    /// Remove an installed package via universal bridge
+    Remove { name: String },
+    /// Refresh registries and update packages
+    Update,
+    /// Upgrade all universal packages via Apex bridge
+    Upgrade,
 }
 
 struct MiniMoss {
@@ -105,7 +111,6 @@ fn get_catalog() -> Vec<Package> {
     ]
 }
 
-/// Automatically ensures ~/.config/nixpkgs/config.nix exists with allowUnfree = true
 fn ensure_unfree_config() -> Result<(), Box<dyn std::error::Error>> {
     let home = env::var("HOME")?;
     let mut config_dir = PathBuf::from(home);
@@ -119,6 +124,52 @@ fn ensure_unfree_config() -> Result<(), Box<dyn std::error::Error>> {
         fs::write(&config_file, "{ allowUnfree = true; }\n")?;
         println!("✔ Global Nix unfree configuration created.");
     }
+    Ok(())
+}
+
+fn remove_package(package_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    println!("🗑️ Searching profile for '{}'...", package_name);
+
+    let list_output = Command::new("sh")
+        .arg("-c")
+        .arg(". /etc/profile.d/nix.sh 2>/dev/null || . $HOME/.nix-profile/etc/profile.d/nix.sh 2>/dev/null; nix profile list")
+        .output()?;
+
+    let stdout = String::from_utf8_lossy(&list_output.stdout);
+    let mut target_index = None;
+
+    for line in stdout.lines() {
+        if line.contains(package_name) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if let Some(idx_str) = parts.first() {
+                let clean_idx = idx_str.trim_end_matches(':');
+                if clean_idx.parse::<usize>().is_ok() {
+                    target_index = Some(clean_idx.to_string());
+                    break;
+                }
+            }
+        }
+    }
+
+    if let Some(idx) = target_index {
+        println!("🗑️ Removing package index '{}' matching '{}'...", idx, package_name);
+        let status = Command::new("sh")
+            .arg("-c")
+            .arg(format!(
+                ". /etc/profile.d/nix.sh 2>/dev/null || . $HOME/.nix-profile/etc/profile.d/nix.sh 2>/dev/null; nix profile remove {}",
+                idx
+            ))
+            .status()?;
+
+        if status.success() {
+            println!("✅ Successfully removed '{}' via Apex!", package_name);
+        } else {
+            println!("❌ Failed to remove package from Nix profile.");
+        }
+    } else {
+        println!("❌ Package '{}' not found in your Nix profile.", package_name);
+    }
+
     Ok(())
 }
 
@@ -180,7 +231,6 @@ fn main() {
 
                 println!("🚀 APEX: Successfully installed '{}' locally via MiniMoss!", pkg.name);
             } else {
-                // Ensure unfree licenses are allowed globally before hitting Nix
                 let _ = ensure_unfree_config();
 
                 let check_nix = Command::new("nix").arg("--version").status();
@@ -218,6 +268,41 @@ fn main() {
                     Ok(s) if s.success() => println!("✅ Successfully installed '{}' via Apex Universal Bridge!", name),
                     _ => println!("❌ Package '{}' not found in registry.", name),
                 }
+            }
+        }
+        Commands::Remove { name } => {
+            if let Err(e) = remove_package(&name) {
+                eprintln!("❌ Error: {}", e);
+            }
+        }
+        Commands::Update => {
+            let _ = ensure_unfree_config();
+            println!("🔄 Refreshing package registries and fetching latest versions...");
+            let status = Command::new("sh")
+                .arg("-c")
+                .arg(format!(
+                    ". /etc/profile.d/nix.sh 2>/dev/null || . $HOME/.nix-profile/etc/profile.d/nix.sh 2>/dev/null; NIXPKGS_ALLOW_UNFREE=1 nix profile upgrade --all --refresh --impure"
+                ))
+                .status();
+
+            match status {
+                Ok(s) if s.success() => println!("✅ Registries refreshed and packages updated successfully!"),
+                _ => println!("❌ Failed to refresh packages."),
+            }
+        }
+        Commands::Upgrade => {
+            let _ = ensure_unfree_config();
+            println!("⬆️ Upgrading all universal packages via Apex bridge...");
+            let status = Command::new("sh")
+                .arg("-c")
+                .arg(format!(
+                    ". /etc/profile.d/nix.sh 2>/dev/null || . $HOME/.nix-profile/etc/profile.d/nix.sh 2>/dev/null; NIXPKGS_ALLOW_UNFREE=1 nix profile upgrade --all --impure"
+                ))
+                .status();
+
+            match status {
+                Ok(s) if s.success() => println!("✅ All packages upgraded successfully!"),
+                _ => println!("❌ Failed to upgrade packages."),
             }
         }
     }
