@@ -1,12 +1,12 @@
 [package]
 name = "apex"
-version = "0.5.0"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-blake3 = "1.5"
+clap = { version = "4.4", features = ["derive"] }
 ureq = "2.9"
-clap = { version = "4.0", features = ["derive"] }
-bzip2 = "0.4"
+blake3 = "1.5"
 tar = "0.4"
+bzip2 = "0.4"
 flate2 = "1.0"
