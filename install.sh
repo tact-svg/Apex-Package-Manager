@@ -8,9 +8,14 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}🚀 Installing Apex Package Manager...${NC}"
 
-# 1. Load Cargo environment if it exists, then check for cargo
+# 1. Load Cargo environment or check common paths explicitly
 if [ -f "$HOME/.cargo/env" ]; then
     . "$HOME/.cargo/env"
+fi
+
+# Fallback explicit path check
+if ! command -v cargo &> /dev/null && [ -f "$HOME/.cargo/bin/cargo" ]; then
+    export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
 if ! command -v cargo &> /dev/null; then
