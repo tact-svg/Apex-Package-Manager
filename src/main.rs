@@ -105,6 +105,23 @@ fn get_catalog() -> Vec<Package> {
     ]
 }
 
+/// Automatically ensures ~/.config/nixpkgs/config.nix exists with allowUnfree = true
+fn ensure_unfree_config() -> Result<(), Box<dyn std::error::Error>> {
+    let home = env::var("HOME")?;
+    let mut config_dir = PathBuf::from(home);
+    config_dir.push(".config");
+    config_dir.push("nixpkgs");
+    
+    fs::create_dir_all(&config_dir)?;
+    let config_file = config_dir.join("config.nix");
+    
+    if !config_file.exists() {
+        fs::write(&config_file, "{ allowUnfree = true; }\n")?;
+        println!("✔ Global Nix unfree configuration created.");
+    }
+    Ok(())
+}
+
 fn main() {
     let cli = Cli::parse();
     let home = env::var("HOME").expect("HOME not set");
@@ -163,6 +180,9 @@ fn main() {
 
                 println!("🚀 APEX: Successfully installed '{}' locally via MiniMoss!", pkg.name);
             } else {
+                // Ensure unfree licenses are allowed globally before hitting Nix
+                let _ = ensure_unfree_config();
+
                 let check_nix = Command::new("nix").arg("--version").status();
                 if check_nix.is_err() || !check_nix.unwrap().success() {
                     println!("⚡ Nix backend not found. Downloading universal installer script...");
@@ -188,7 +208,10 @@ fn main() {
                 println!("🌐 Installing '{}' via Universal Registry bridge...", name);
                 let status = Command::new("sh")
                     .arg("-c")
-                    .arg(format!(". /etc/profile.d/nix.sh 2>/dev/null || . $HOME/.nix-profile/etc/profile.d/nix.sh 2>/dev/null; nix profile install nixpkgs#{}", name))
+                    .arg(format!(
+                        ". /etc/profile.d/nix.sh 2>/dev/null || . $HOME/.nix-profile/etc/profile.d/nix.sh 2>/dev/null; NIXPKGS_ALLOW_UNFREE=1 nix profile install --impure nixpkgs#{}",
+                        name
+                    ))
                     .status();
 
                 match status {
